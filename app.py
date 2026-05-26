@@ -12,8 +12,14 @@ st.set_page_config(page_title="Prepress Cylinder Validator & PDF Generator", lay
 st.title("🖨️ Prepress Cylinder Validator & PDF Exporter")
 st.write("Input job specifications, validate constraints against live inventory, upload artwork, and generate a print-ready job sheet PDF.")
 
+# --- INITIALIZE SESSION STATE FOR CLEAN FORM RESETTING ---
+if "reset_trigger" not in st.session_state:
+    st.session_state.reset_trigger = 0
+
+def reset_callback():
+    st.session_state.reset_trigger += 1
+
 # --- DATABASE / INVENTORY LOADING ---
-# Load the inventory CSV file. If it doesn't exist, create a default one.
 csv_filename = "inventory.csv"
 if not os.path.exists(csv_filename):
     default_data = {
@@ -21,7 +27,7 @@ if not os.path.exists(csv_filename):
         "cutbag": [420, 450, 500, 550, 600, 680, 750],
         "cylinder": [470, 500, 550, 600, 650, 730, 800],
         "max_colors": [7, 7, 7, 7, 7, 8, 8],
-        "quantity_available": [5, 2, 0, 8, 4, 3, 6] # Example stock: 500mm cutbag set to 0 to test out-of-stock validation
+        "quantity_available": [5, 2, 0, 8, 4, 3, 6]
     }
     df_inv = pd.DataFrame(default_data)
     df_inv.to_csv(csv_filename, index=False)
@@ -32,11 +38,13 @@ else:
 st.header("Job Identifiers")
 top_col1, top_col2 = st.columns(2)
 with top_col1:
-    customer_name = st.text_input("Customer Name", placeholder="e.g., Brand Name Ltd", value="")
+    customer_name = st.text_input("Customer Name", placeholder="e.g., Brand Name Ltd", key=f"cust_{st.session_state.reset_trigger}")
 with top_col2:
-    design_name = st.text_input("Design Name", placeholder="e.g., Mango Juice 500ml Label", value="")
+    design_name = st.text_input("Design Name", placeholder="e.g., Mango Juice 500ml Label", key=f"dsgn_{st.session_state.reset_trigger}")
 
-# --- SIDEBAR REF (Now dynamic from your CSV) ---
+materials = st.text_input("Materials Specification", placeholder="e.g., BOPP 20mic / White LDPE 35mic", key=f"mat_{st.session_state.reset_trigger}")
+
+# --- SIDEBAR REF ---
 st.sidebar.header("📊 Live DB Inventory Stock")
 st.sidebar.dataframe(df_inv, hide_index=True)
 
@@ -45,46 +53,40 @@ st.header("1. Job Specifications")
 col1, col2 = st.columns(2)
 
 with col1:
-    job_width = st.number_input("Artwork Width (mm)", min_value=0.0, value=0.0, step=1.0)
-    job_height = st.number_input("Artwork Height (mm)", min_value=0.0, value=0.0, step=1.0)
-    ups = st.number_input("Number of Ups", min_value=1, value=1, step=1)
-    colors = st.number_input("Number of Colors", min_value=0, max_value=8, value=1, step=1)
+    job_width = st.number_input("Artwork Width (mm)", min_value=0.0, value=0.0, step=1.0, key=f"w_{st.session_state.reset_trigger}")
+    job_height = st.number_input("Artwork Height (mm)", min_value=0.0, value=0.0, step=1.0, key=f"h_{st.session_state.reset_trigger}")
+    ups = st.number_input("Number of Ups", min_value=1, value=1, step=1, key=f"ups_{st.session_state.reset_trigger}")
+    colors = st.number_input("Number of Colors", min_value=0, max_value=8, value=1, step=1, key=f"col_{st.session_state.reset_trigger}")
 
 with col2:
-    trim_type = st.selectbox("Trim Type", ["Center Seal", "Bottle Sleeve", "Manual"])
+    trim_type = st.selectbox("Trim Type", ["Center Seal", "Bottle Sleeve", "Manual"], key=f"tt_{st.session_state.reset_trigger}")
     if trim_type == "Center Seal":
-        trim = st.selectbox("Center Seal Trim (mm)", [10.0, 8.0, 15.0], index=0)
+        trim = st.selectbox("Center Seal Trim (mm)", [10.0, 8.0, 15.0], index=0, key=f"tcs_{st.session_state.reset_trigger}")
     elif trim_type == "Bottle Sleeve":
         trim = 13.0
         st.info("Bottle Sleeve standard trim: 13mm")
     else:
-        trim = st.number_input("Manual Trim (mm)", min_value=0.0, value=10.0, step=0.5)
+        trim = st.number_input("Manual Trim (mm)", min_value=0.0, value=10.0, step=0.5, key=f"tm_{st.session_state.reset_trigger}")
 
-    repeats_count = st.number_input("Number of Repeats on Cylinder", min_value=1, value=1, step=1)
+    repeats_count = st.number_input("Number of Repeats on Cylinder", min_value=1, value=1, step=1, key=f"rep_{st.session_state.reset_trigger}")
 
 
-# --- STEP 2: DYNAMIC DB MACHINE & CYLINDER SELECTION ---
+# --- STEP 2: MACHINE & CYLINDER SELECTION ---
 st.header("2. Machine & Cylinder Selection")
-machine = st.radio("Select Gravure Machine", ["Narrow Gravure", "Wider Gravure"], horizontal=True)
+machine = st.radio("Select Gravure Machine", ["Narrow Gravure", "Wider Gravure"], horizontal=True, key=f"mach_{st.session_state.reset_trigger}")
 
-# Filter database based on selected machine
 filtered_df = df_inv[df_inv["machine"] == machine]
 cutbag_options = filtered_df["cutbag"].tolist()
 
 col3, col4 = st.columns(2)
 with col3:
-    # Dynamically select default index based on your historical configurations
     default_idx = 2 if (machine == "Narrow Gravure" and 500 in cutbag_options) else 0
-    cutbag = st.selectbox("Select Cutbag Size (mm)", cutbag_options, index=default_idx)
+    cutbag = st.selectbox("Select Cutbag Size (mm)", cutbag_options, index=default_idx, key=f"cb_{st.session_state.reset_trigger}")
 
-# Fetch matching row data out of our CSV Dataframe array
 selected_row = filtered_df[filtered_df["cutbag"] == cutbag].iloc[0]
-
-# CRITICAL UPDATE: Cylinder size is now automatically extracted from DB based on Cutbag selection!
 cylinder = float(selected_row["cylinder"])
 
 with col4:
-    # Display read-only cylinder and availability metrics to user
     st.metric(label="Automated Cylinder Size", value=f"{cylinder} mm")
     stock_qty = int(selected_row["quantity_available"])
     if stock_qty > 0:
@@ -103,14 +105,12 @@ calculated_repeat_length = job_height * repeats_count
 st.header("3. Validation Results")
 errors = []
 
-# Inventory Rules Verification
 if stock_qty <= 0:
     errors.append(f"❌ **Inventory Error:** The chosen {cutbag}mm Cutbag layout configuration is currently **Out of Stock** in the plant storage registry.")
 
 if colors > int(selected_row["max_colors"]):
     errors.append(f"❌ **Color Capacity Error:** The selected configuration exceeds the maximum limit of {selected_row['max_colors']} color stations supported by this cylinder set.")
 
-# Static Rule Validations
 if not formula_passed:
     errors.append(f"❌ **Formula Failed:** `(Width + Trim) * 2 * Ups` [{calculated_cutbag_val:.1f}mm] must be less than Cutbag [{cutbag}mm].")
 if ups >= cutbag:
@@ -155,7 +155,7 @@ upload_cols = st.columns(2)
 for i in range(4):
     target_column = upload_cols[i % 2]
     with target_column:
-        slot_file = st.file_uploader(f"Slot {i+1}: Choose or paste artwork", type=["png", "jpg", "jpeg"], key=f"artwork_slot_{i}")
+        slot_file = st.file_uploader(f"Slot {i+1}: Choose or paste artwork", type=["png", "jpg", "jpeg"], key=f"art_slot_{i}_{st.session_state.reset_trigger}")
         if slot_file is not None:
             img = Image.open(slot_file)
             st.image(img, caption=f"Slot {i+1} Active Design", use_container_width=True)
@@ -192,7 +192,7 @@ def generate_fpdf2_report():
         pdf.set_text_color(0, 0, 0)
         pdf.cell(110, 8.5, txt=f"  {val}", border=1, ln=True)
 
-    # SECTION 1: Metadata
+    # SECTION 1: Metadata (Includes Materials parameters now)
     current_time_str = datetime.now().strftime("%Y-%m-%d  %I:%M %p")
     pdf.set_font("Arial", style="B", size=11)
     pdf.set_text_color(44, 62, 80)
@@ -200,6 +200,7 @@ def generate_fpdf2_report():
     pdf.ln(1.5)
     draw_table_row("Customer Name", customer_name.strip())
     draw_table_row("Design Description", design_name.strip())
+    draw_table_row("Materials Config", materials.strip())
     draw_table_row("Generated Date & Time", current_time_str)
     pdf.ln(6)
 
@@ -243,34 +244,43 @@ def generate_fpdf2_report():
     return pdf.output()
 
 
-# --- STEP 6: CONDITIONAL DOWNLOAD ENGINE (Blocks if names are missing OR validations fail) ---
+# --- STEP 6: EXPORT CONTROL ENGINE & GLOBAL RESET ---
 st.markdown("---")
-st.subheader("Generate Export Document")
+st.subheader("Form Management Actions")
 
-is_identifiers_missing = not customer_name.strip() or not design_name.strip()
+action_col1, action_col2 = st.columns(2)
 
-if is_identifiers_missing:
-    st.warning("⚠️ **Prepress Export Locked:** You must enter both a **Customer Name** and a **Design Name** at the top to download the PDF.")
-    st.button("Generate & Download Job Sheet PDF", disabled=True)
-elif len(errors) > 0:
-    st.error("🛑 **Prepress Export Locked:** Fix the validation or inventory errors shown above before downloading the job sheet.")
-    st.button("Generate & Download Job Sheet PDF", disabled=True)
-else:
-    if st.button("Generate & Download Job Sheet PDF"):
-        with st.spinner("Compiling structural production sheets..."):
-            try:
-                pdf_data = generate_fpdf2_report()
-                pdf_bytes = bytes(pdf_data)
-                
-                safe_customer = "".join(x for x in customer_name if x.isalnum() or x in "._- ").strip().replace(" ", "_")
-                safe_design = "".join(x for x in design_name if x.isalnum() or x in "._- ").strip().replace(" ", "_")
-                final_filename = f"{safe_customer}_{safe_design}_job_sheet.pdf"
-                
-                st.download_button(
-                    label="📥 Click Here to Download PDF",
-                    data=pdf_bytes,
-                    file_name=final_filename,
-                    mime="application/pdf"
-                )
-            except Exception as e:
-                st.error(f"Failed to compile layout output: {e}")
+with action_col1:
+    # Check if any mandatory structural information parameters are empty strings
+    is_fields_empty = not customer_name.strip() or not design_name.strip() or not materials.strip()
+
+    if is_fields_empty:
+        st.warning("⚠️ **Prepress Export Locked:** You must enter **Customer Name**, **Design Name**, and **Materials Specification** to compile the document.")
+        st.button("Generate & Download Job Sheet PDF", disabled=True, key="dl_btn_disabled")
+    elif len(errors) > 0:
+        st.error("🛑 **Prepress Export Locked:** Resolve technical validation errors before exporting.")
+        st.button("Generate & Download Job Sheet PDF", disabled=True, key="dl_btn_error")
+    else:
+        if st.button("Generate & Download Job Sheet PDF", key="dl_btn_active"):
+            with st.spinner("Compiling structural production sheets..."):
+                try:
+                    pdf_data = generate_fpdf2_report()
+                    pdf_bytes = bytes(pdf_data)
+                    
+                    safe_customer = "".join(x for x in customer_name if x.isalnum() or x in "._- ").strip().replace(" ", "_")
+                    safe_design = "".join(x for x in design_name if x.isalnum() or x in "._- ").strip().replace(" ", "_")
+                    final_filename = f"{safe_customer}_{safe_design}_job_sheet.pdf"
+                    
+                    st.download_button(
+                        label="📥 Click Here to Download PDF",
+                        data=pdf_bytes,
+                        file_name=final_filename,
+                        mime="application/pdf"
+                    )
+                except Exception as e:
+                    st.error(f"Failed to compile layout output: {e}")
+
+with action_col2:
+    # Reset button execution block
+    st.write("Need to clear out structural measurements for a new job?")
+    st.button("🔄 RESET FORM FIELDS", on_click=reset_callback, type="secondary")
