@@ -96,10 +96,19 @@ with col4:
         st.error("Stock Status: OUT OF STOCK ❌")
 
 # --- FORMULA CALCULATIONS ---
-total_print_width = (job_width + trim)*2 * ups
-calculated_cutbag_val = (job_width + trim) * 2 * ups
+if trim_type == "Bottle Sleeve":
+    # Custom wrap-around sleeve calculation logic: ((Width * 2) + 13mm Trim) * Ups
+    total_print_width = ((job_width * 2) + 13.0) * ups
+else:
+    # Standard flat-web production logic: (Width + Trim) * 2 * Ups
+    total_print_width = (job_width + trim) * 2 * ups
+
+# The cutbag check target value always tracks your baseline production layout requirement
+calculated_cutbag_val = total_print_width
 formula_passed = calculated_cutbag_val < cutbag
 etch_width = total_print_width + 21.0
+
+# Calculated production line loop length (circumference requirement)
 calculated_repeat_length = job_height * repeats_count
 
 # --- STEP 3: VALIDATION LOGIC ---
