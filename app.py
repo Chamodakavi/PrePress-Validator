@@ -4,6 +4,7 @@ from fpdf import FPDF
 from PIL import Image
 import io
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import os
 
 # Set up page config
@@ -194,7 +195,8 @@ def generate_fpdf2_report():
         pdf.cell(110, 8.5, txt=f"  {val}", border=1, ln=True)
 
     # SECTION 1: Metadata (Includes Materials parameters now)
-    current_time_str = datetime.now().strftime("%Y-%m-%d  %I:%M %p")
+    local_tz = ZoneInfo("Asia/Colombo")
+    current_time_str = datetime.now(local_tz).strftime("%Y-%m-%d  %I:%M %p")
     pdf.set_font("Arial", style="B", size=11)
     pdf.set_text_color(44, 62, 80)
     pdf.cell(180, 7, txt="1. PROCESSING METADATA", ln=True)
