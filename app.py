@@ -149,7 +149,7 @@ m_col4.metric("repeat Height", f"{calculated_repeat_length:.1f} mm")
 st.header("5. Artwork Attachments")
 st.write("Upload or paste images individually. Click the **clear/cross button** on a slot if you need to delete a mistaken file.")
 
-artwork_list = []
+artwork_list = []  # This will now hold PIL Image objects directly
 upload_cols = st.columns(2)
 
 for i in range(4):
@@ -159,12 +159,13 @@ for i in range(4):
         if slot_file is not None:
             img = Image.open(slot_file)
             st.image(img, caption=f"Slot {i+1} Active Design", use_container_width=True)
-            buffered = io.BytesIO()
+            
+            # Convert to RGB mode safely
             if img.mode in ("RGBA", "P"):
                 img = img.convert("RGB")
-            img.save(buffered, format="JPEG", quality=80)
-            artwork_list.append(buffered.getvalue())
-
+            
+            # FIX: Append the actual PIL image object, not the bytes
+            artwork_list.append(img)
 
 # FPDF2 Generator Function
 def generate_fpdf2_report():
@@ -230,17 +231,19 @@ def generate_fpdf2_report():
     pdf.ln(5)
 
     # SECTION 4: Images
+    # SECTION 4: Images (Strict 1 per page rule)
     if artwork_list:
-        for idx, img_bytes in enumerate(artwork_list):
+        for idx, img_obj in enumerate(artwork_list):
             pdf.add_page()
             pdf.set_font("Arial", style="B", size=12)
             pdf.set_text_color(44, 62, 80)
-            pdf.cell(180, 8, txt=f"ATTACHED DESIGN DESIGN - COMPONENT {idx + 1}", ln=True)
+            pdf.cell(180, 8, txt=f"ATTACHED DESIGN - COMPONENT {idx + 1}", ln=True)
             pdf.set_draw_color(189, 195, 199)
             pdf.line(10, pdf.get_y() + 1, 200, pdf.get_y() + 1)
             pdf.ln(5)
-            img_io = io.BytesIO(img_bytes)
-            pdf.image(img_io, x=15, y=pdf.get_y() + 2, w=180)
+            
+            # FIX: Pass the PIL image object directly to fpdf
+            pdf.image(img_obj, x=15, y=pdf.get_y() + 2, w=180)
     return pdf.output()
 
 
